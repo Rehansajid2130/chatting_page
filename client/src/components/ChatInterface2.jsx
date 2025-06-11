@@ -7,7 +7,8 @@ const ChatInterface2 = () => {
   return (
     <div className="chat-interface2">
       <div className="header">
-        <div className="back-arrow" onClick={() => navigate("/RecruiterDashBoardPage")}>
+        {/* TODO: Update navigation for RecruiterDashboardPage when implemented */}
+        <div className="back-arrow" onClick={() => navigate("/")}>
           <img src="/assets/images/icon_3.svg" alt="Back Arrow" />
         </div>
         <h2>Messages</h2>

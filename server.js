@@ -61,7 +61,7 @@ app.use(cors({
 }));
 
 // Serve static files from the React app
-app.use(express.static(path.join(__dirname, 'build')));
+app.use(express.static(path.join(__dirname, 'client', 'build')));
 
 // Database configuration
 const db = require("./config/keys").mongoURI;
@@ -85,11 +85,14 @@ app.use(function (req, res, next) {
   next();
 });
 
+// Serve uploaded files
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 // Routes
 app.use("/api/users", require("./routes/api/users"));
 app.use("/api/messages", require("./routes/api/messages"));
 
 // Handle React routing, return all requests to React app
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'build', 'index.html'));
+  res.sendFile(path.join(__dirname, 'client', 'build', 'index.html'));
 }); 
