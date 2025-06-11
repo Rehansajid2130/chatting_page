@@ -28,14 +28,26 @@ const ChatInterface1 = ({ onSelectChat }) => {
 
     socket.on('connect', () => {
       console.log('Connected to socket server');
-      const userId = localStorage.getItem('userId');
+      const userId = localStorage.getItem('userId'); // Ensure this is correctly fetched
       if (userId) {
         socket.emit('join', userId);
       }
     });
 
-    socket.on('message', (message) => {
+    socket.on('receiveMessage', (message) => { // Changed from 'message' to 'receiveMessage'
       setMessages((prevMessages) => [...prevMessages, message]);
+      // Update localStorage as well when a new message is received
+      if (selectedChat && message.receiver === localStorage.getItem('userId')) { // Only if message is for current user
+        const currentMessages = JSON.parse(localStorage.getItem(`chat_messages_${message.sender}`)) || [];
+        localStorage.setItem(`chat_messages_${message.sender}`, JSON.stringify([...currentMessages, message]));
+      } else if (selectedChat && message.sender === localStorage.getItem('userId')) { // Message sent by current user, confirmed by server
+        const currentMessages = JSON.parse(localStorage.getItem(`chat_messages_${message.receiver}`)) || [];
+        // This part might be redundant if optimistic update already updated with server's final message
+        const existingMsg = currentMessages.find(m => m._id === message._id || (m.tempId && message.tempId && m.tempId === message.tempId));
+        if (!existingMsg) {
+          localStorage.setItem(`chat_messages_${message.receiver}`, JSON.stringify([...currentMessages, message]));
+        }
+      }
     });
 
     socket.on('connect_error', (error) => {
@@ -134,18 +146,21 @@ const ChatInterface1 = ({ onSelectChat }) => {
 
       // Create a temporary message object
       const tempMessage = {
+        tempId: Date.now().toString(), // Unique temporary ID
         content: message,
         sender: localStorage.getItem("userId"),
+        receiver: selectedChat.id, // Ensure receiver is part of temp message
         date: new Date().toISOString(),
         fileUrl: file ? URL.createObjectURL(file) : null,
         fileType: file ? file.type : null
       };
 
       // Add the message to the UI immediately
-      const newMessages = [...messages, tempMessage];
-      setMessages(newMessages);
-      // Store in localStorage
-      localStorage.setItem(`chat_messages_${selectedChat.id}`, JSON.stringify(newMessages));
+      setMessages(prevMessages => [...prevMessages, tempMessage]);
+      // Store in localStorage (optimistically)
+      // Note: this will be updated again once server confirms
+      const currentMessagesForStorage = [...messages, tempMessage];
+      localStorage.setItem(`chat_messages_${selectedChat.id}`, JSON.stringify(currentMessagesForStorage));
       
       // Clear the input
       setMessage("");
@@ -159,19 +174,28 @@ const ChatInterface1 = ({ onSelectChat }) => {
         },
       });
 
-      // Update the message with server response if needed
+      // Update the message with server response
       if (response.data) {
-        const updatedMessages = messages.map(msg => 
-          msg.content === tempMessage.content && 
-          msg.sender === tempMessage.sender ? 
-          response.data : msg
-        );
-        setMessages(updatedMessages);
-        // Update localStorage
-        localStorage.setItem(`chat_messages_${selectedChat.id}`, JSON.stringify(updatedMessages));
+        const finalMessageFromServer = response.data;
+        setMessages(prevMessages => {
+          const updated = prevMessages.map(msg =>
+            msg.tempId === tempMessage.tempId ? finalMessageFromServer : msg
+          );
+          // Update localStorage with the final message from server
+          localStorage.setItem(`chat_messages_${selectedChat.id}`, JSON.stringify(updated));
+          return updated;
+        });
+      } else {
+        // If server didn't return a message, remove the temp one or mark as failed
+        // For now, just log it. A more robust solution would be to mark message as failed.
+        console.warn("Message sent, but no confirmation message received from server.", tempMessage);
       }
     } catch (error) {
       console.error("Error sending message:", error);
+      // Optionally, remove the optimistic message or mark it as failed on error
+      setMessages(prevMessages => prevMessages.filter(msg => msg.tempId !== tempMessage.tempId));
+      // Re-set local storage without the failed optimistic message
+      localStorage.setItem(`chat_messages_${selectedChat.id}`, JSON.stringify(messages.filter(msg => msg.tempId !== tempMessage.tempId)));
       if (error.response?.status === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('userId');
@@ -195,7 +219,8 @@ const ChatInterface1 = ({ onSelectChat }) => {
             <span className="fiesta-text">Fiesta</span>
           </div>
           <div className="messages-header">
-            <div className="back-arrow" onClick={() => navigate("/RecruiterDashBoardPage")}>
+            {/* TODO: Update navigation for RecruiterDashboardPage when implemented */}
+            <div className="back-arrow" onClick={() => navigate("/")}>
               <img src="/assets/images/icon_3.svg" alt="Back Arrow" />
             </div>
             <h2>Messages</h2>
@@ -206,66 +231,19 @@ const ChatInterface1 = ({ onSelectChat }) => {
           <input type="text" placeholder="Search people or message" />
         </div>
 
+        {/* TODO: Replace with dynamic user list fetching */}
+        {/* FIXME: Hardcoded user ID for testing. Needs dynamic user loading. */}
         <div className="contacts-list">
-          <div className="contact-item" onClick={() => handleChatSelect({ id: "1", name: "Hassan", lastMessage: "Chris Martin reacted with" })}>
+          <div className="contact-item" onClick={() => handleChatSelect({ id: "REPLACE_WITH_A_VALID_USER_ID_YOU_CAN_TEST_WITH", name: "Test User", lastMessage: "Click to chat" })}>
             <div className="avatar">
               <img src="/assets/images/ellipse_37.png" alt="User Avatar" />
             </div>
             <div className="contact-info">
-              <span className="name">Hassan</span>
-              <span className="last-message">Chris Martin reacted with</span>
+              <span className="name">Test User</span>
+              <span className="last-message">Click to chat</span>
             </div>
           </div>
-
-          <div className="contact-item" onClick={() => handleChatSelect({ id: "2", name: "Talal", lastMessage: "Thank u lot for your good recommendati..." })}>
-            <div className="avatar">
-              <img src="/assets/images/ellipse_37.png" alt="User Avatar" />
-            </div>
-            <div className="contact-info">
-              <span className="name">Talal</span>
-              <span className="last-message">Thank u lot for your good recommendati...</span>
-            </div>
-          </div>
-
-          <div className="contact-item" onClick={() => handleChatSelect({ id: "3", name: "Zain Zeeshan", lastMessage: "Chris Martin reacted with love" })}>
-            <div className="avatar">
-              <img src="/assets/images/ellipse_37.png" alt="User Avatar" />
-            </div>
-            <div className="contact-info">
-              <span className="name">Zain Zeeshan</span>
-              <span className="last-message">Chris Martin reacted with love</span>
-            </div>
-          </div>
-
-          <div className="contact-item" onClick={() => handleChatSelect({ id: "4", name: "M A L I", lastMessage: "thank u lot for your good recommendation" })}>
-            <div className="avatar">
-              <img src="/assets/images/ellipse_37.png" alt="User Avatar" />
-            </div>
-            <div className="contact-info">
-              <span className="name">M A L I</span>
-              <span className="last-message">thank u lot for your good recommendation</span>
-            </div>
-          </div>
-
-          <div className="contact-item" onClick={() => handleChatSelect({ id: "5", name: "Furqan Zeeshan", lastMessage: "Thanks for your time" })}>
-            <div className="avatar">
-              <img src="/assets/images/ellipse_37.png" alt="User Avatar" />
-            </div>
-            <div className="contact-info">
-              <span className="name">Furqan Zeeshan</span>
-              <span className="last-message">Thanks for your time</span>
-            </div>
-          </div>
-
-          <div className="contact-item" onClick={() => handleChatSelect({ id: "6", name: "Rehan Sajjid", lastMessage: "Looking forward to work with you" })}>
-            <div className="avatar">
-              <img src="/assets/images/ellipse_37.png" alt="User Avatar" />
-            </div>
-            <div className="contact-info">
-              <span className="name">Rehan Sajjid</span>
-              <span className="last-message">Looking forward to work with you</span>
-            </div>
-          </div>
+          {/* Add more contacts here or load dynamically */}
         </div>
 
         <div className="current-user-profile">
@@ -273,7 +251,7 @@ const ChatInterface1 = ({ onSelectChat }) => {
             <img src="/assets/images/ellipse_37.png" alt="Current User Avatar" />
           </div>
           <div className="username">
-            Furqan12
+            {localStorage.getItem('userName') || "User"}
           </div>
           <div className="options-icon">...</div>
         </div>
@@ -291,7 +269,7 @@ const ChatInterface1 = ({ onSelectChat }) => {
           <div className="messages-container">
             {Array.isArray(messages) && messages.map((msg, index) => (
               <div
-                key={index}
+                key={msg.tempId || msg._id || index} {/* Use tempId or _id as key */}
                 className={`message ${msg.sender === localStorage.getItem("userId") ? "sent" : "received"}`}
               >
                 {msg.fileUrl && (
