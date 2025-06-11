@@ -1,0 +1,15 @@
+/node_modules
+
+# Logs
+logs
+*.log
+
+# Environment files
+.env
+
+# OS or editor files
+.DS_Store
+.idea/
+
+client/node_modules
+**/node_modules/
