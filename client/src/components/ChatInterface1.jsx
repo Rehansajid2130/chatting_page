@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import React, { useState, useEffect, useRef } from "react";
 import io from "socket.io-client";
 import axios from "axios";
+import UserSearch from './UserSearch';
 
 const ChatInterface1 = ({ onSelectChat }) => {
   const navigate = useNavigate();
@@ -9,6 +10,7 @@ const ChatInterface1 = ({ onSelectChat }) => {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [file, setFile] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null); // State to store the selected user
   const socketRef = useRef();
   const messagesEndRef = useRef(null);
 
@@ -19,6 +21,7 @@ const ChatInterface1 = ({ onSelectChat }) => {
       return;
     }
 
+    console.log('Connecting to socket with token:', token);
     const socket = io('http://localhost:5000', {
       withCredentials: true,
       auth: {
@@ -28,9 +31,13 @@ const ChatInterface1 = ({ onSelectChat }) => {
 
     socket.on('connect', () => {
       console.log('Connected to socket server');
-      const userId = localStorage.getItem('userId'); // Ensure this is correctly fetched
+      const userId = localStorage.getItem('userId');
       if (userId) {
+        console.log('Joining room with userId:', userId);
         socket.emit('join', userId);
+      } else {
+        console.error('No userId found in localStorage');
+        navigate('/login');
       }
     });
 
@@ -53,6 +60,7 @@ const ChatInterface1 = ({ onSelectChat }) => {
     socket.on('connect_error', (error) => {
       console.error('Socket connection error:', error);
       if (error.message === 'Authentication error') {
+        console.error('Authentication failed, redirecting to login');
         localStorage.removeItem('token');
         localStorage.removeItem('userId');
         navigate('/login');
@@ -130,6 +138,7 @@ const ChatInterface1 = ({ onSelectChat }) => {
     e.preventDefault();
     if (!message && !file) return;
 
+    let tempMessage = null; // Declare tempMessage here
     try {
       const token = localStorage.getItem('token');
       if (!token) {
@@ -145,7 +154,7 @@ const ChatInterface1 = ({ onSelectChat }) => {
       }
 
       // Create a temporary message object
-      const tempMessage = {
+      tempMessage = { // Assign to the declared variable
         tempId: Date.now().toString(), // Unique temporary ID
         content: message,
         sender: localStorage.getItem("userId"),
@@ -178,7 +187,7 @@ const ChatInterface1 = ({ onSelectChat }) => {
       if (response.data) {
         const finalMessageFromServer = response.data;
         setMessages(prevMessages => {
-          const updated = prevMessages.map(msg =>
+          const updated = prevMessages.map(msg => 
             msg.tempId === tempMessage.tempId ? finalMessageFromServer : msg
           );
           // Update localStorage with the final message from server
@@ -193,9 +202,14 @@ const ChatInterface1 = ({ onSelectChat }) => {
     } catch (error) {
       console.error("Error sending message:", error);
       // Optionally, remove the optimistic message or mark it as failed on error
-      setMessages(prevMessages => prevMessages.filter(msg => msg.tempId !== tempMessage.tempId));
-      // Re-set local storage without the failed optimistic message
-      localStorage.setItem(`chat_messages_${selectedChat.id}`, JSON.stringify(messages.filter(msg => msg.tempId !== tempMessage.tempId)));
+      if (tempMessage && tempMessage.tempId) { // Check if tempMessage was defined
+        setMessages(prevMessages => prevMessages.filter(msg => msg.tempId !== tempMessage.tempId));
+        // Re-set local storage without the failed optimistic message
+        // Ensure 'messages' here is the state *before* this failed message was added, or filter from current state.
+        // The setMessages above handles the UI, this localStorage update should reflect that.
+        const currentMessagesInState = messages.filter(msg => msg.tempId !== tempMessage.tempId);
+        localStorage.setItem(`chat_messages_${selectedChat.id}`, JSON.stringify(currentMessagesInState));
+      }
       if (error.response?.status === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('userId');
@@ -207,6 +221,12 @@ const ChatInterface1 = ({ onSelectChat }) => {
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
+  };
+
+  const handleUserSelect = (user) => {
+    setSelectedUser(user);
+    console.log('Selected user:', user); // For testing
+    // TODO: Implement logic to start a chat with the selected user
   };
 
   return (
@@ -269,7 +289,7 @@ const ChatInterface1 = ({ onSelectChat }) => {
           <div className="messages-container">
             {Array.isArray(messages) && messages.map((msg, index) => (
               <div
-                key={msg.tempId || msg._id || index} {/* Use tempId or _id as key */}
+                key={msg.tempId || msg._id || index}
                 className={`message ${msg.sender === localStorage.getItem("userId") ? "sent" : "received"}`}
               >
                 {msg.fileUrl && (
@@ -315,6 +335,9 @@ const ChatInterface1 = ({ onSelectChat }) => {
           </form>
         </div>
       )}
+
+      <UserSearch onUserSelect={handleUserSelect} /> {/* Pass the handleUserSelect function as a prop */}
+      {selectedUser && <p>You selected: {selectedUser.username}</p>} {/* Display the selected user */}
 
       <style>{`
         .chat-sidebar {
@@ -579,4 +602,4 @@ const ChatInterface1 = ({ onSelectChat }) => {
   );
 };
 
-export default ChatInterface1; 
+export default ChatInterface1;

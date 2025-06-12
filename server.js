@@ -15,20 +15,33 @@ const server = app.listen(port, () =>
   console.log(`Server running on port ${port}`)
 );
 
-const io = require("socket.io").listen(server);
+// Socket.io setup
+const { Server } = require("socket.io");
+const io = new Server(server, {
+  cors: {
+    origin: "http://localhost:3000", // Client's origin
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
 
 // Socket.io authentication middleware
 io.use((socket, next) => {
   const token = socket.handshake.auth.token;
+  console.log('Socket auth - Received token:', token);
+  
   if (!token) {
+    console.log('Socket auth - No token provided');
     return next(new Error("Authentication error"));
   }
 
   try {
     const decoded = jwt.verify(token, require("./config/keys").secretOrKey);
+    console.log('Socket auth - Token verified, user ID:', decoded.id);
     socket.userId = decoded.id;
     next();
   } catch (err) {
+    console.error('Socket auth - Token verification failed:', err);
     return next(new Error("Authentication error"));
   }
 });

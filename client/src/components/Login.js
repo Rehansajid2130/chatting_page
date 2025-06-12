@@ -17,23 +17,30 @@ const Login = () => {
     setError('');
     setSuccessMessage('');
     try {
+      console.log('Attempting login with:', { email });
       const response = await axios.post('/api/users/login', {
         email,
         password
       });
+      console.log('Login response:', response.data);
 
-      // Store the token in localStorage
-      localStorage.setItem('token', response.data.token);
+      // Store the token in localStorage without the "Bearer " prefix
+      const token = response.data.token.replace('Bearer ', '');
+      console.log('Storing token:', token);
+      localStorage.setItem('token', token);
       
       // Decode token to get user ID and name
-      const tokenPayload = response.data.token.split('.')[1];
+      const tokenPayload = token.split('.')[1];
       const decodedToken = JSON.parse(atob(tokenPayload));
+      console.log('Decoded token:', decodedToken);
+      
       localStorage.setItem('userId', decodedToken.id);
       localStorage.setItem('userName', decodedToken.name);
 
-      // Redirect to chat page
+      console.log('Redirecting to chat page...');
       navigate('/chat');
     } catch (err) {
+      console.error('Login error:', err);
       setError(err.response?.data?.message || 'Login failed');
     }
   };
@@ -158,7 +165,7 @@ const Login = () => {
                 {error}
               </div>
             )}
-            {successMessage && ( // Display success message if redirected from registration
+            {successMessage && (
               <div style={{ color: 'green', marginBottom: '1rem', textAlign: 'center' }}>
                 {successMessage}
               </div>
